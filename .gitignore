@@ -5,3 +5,19 @@ __pycache__/
 config.json
 .env
 *.log
+
+# Certificates and keys
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+
+# Editor artifacts
+.DS_Store
+*.bak
+*~
+*.swp
+*.swo
+Thumbs.db
