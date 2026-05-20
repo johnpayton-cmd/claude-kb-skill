@@ -19,7 +19,7 @@ A [Claude Code](https://claude.ai/code) skill for building and maintaining a loc
    ### kb (~/.claude/skills/kb/)
    Knowledgebase navigation and maintenance skill. Invoke with /kb.
    ```
-3. Run `/kb` in Claude Code — if no knowledgebase exists yet, the skill will walk you through creating one.
+3. Run any action command (e.g. `/kb list`) — if no knowledgebase exists yet, you'll be walked through creating one. Run `/kb init` to set it up explicitly. `/kb` alone always shows usage regardless of KB state.
 
 ## Commands
 

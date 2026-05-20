@@ -22,7 +22,7 @@ sub-KBs are supported — security, coding, legal, finance, or any domain.
 
 ## Discovery
 
-When invoked, resolve the knowledgebase root using this priority order:
+On every command **except `/kb` bare (no args)**, resolve the knowledgebase root using this priority order:
 
 1. **CWD check:** Look for `knowledgebase/` in the current working directory
 2. **Parent check:** If not found, look one level up (covers running from inside a project subfolder)
@@ -69,7 +69,7 @@ The path always ends with `/knowledgebase`. To change it: run `/kb init` or edit
 
 ### `/kb` — Show usage
 
-Print this command reference. Do not run a search or load any files.
+Print this command reference. Do not run discovery, initialization, or any file operations. This command always works regardless of whether a knowledgebase exists.
 
 ```
 Usage: /kb <command> [args]
