@@ -26,10 +26,11 @@ On every command **except `/kb` bare (no args)**, resolve the knowledgebase root
 
 1. **CWD check:** Look for `knowledgebase/` in the current working directory
 2. **Parent check:** If not found, look one level up (covers running from inside a project subfolder)
-3. **Config check:** If still not found, read `~/.claude/skills/kb/config.json`. If it contains a `knowledgebase_path` key pointing to an existing directory, use that path. (The stored path always ends with `/knowledgebase`.)
-4. **Initialization:** If no knowledgebase is found by any of the above, run the Initialization Flow (see below).
+3. **Workspace config check:** If still not found, look for `.kb-config.json` in the current working directory. If it exists and contains a `knowledgebase_path` key pointing to an existing directory, use that path. This enables per-project overrides without touching the global config — useful when the same machine has multiple independent workspaces.
+4. **Global config check:** If still not found, read `~/.claude/skills/kb/config.json`. If it contains a `knowledgebase_path` key pointing to an existing directory, use that path. (The stored path always ends with `/knowledgebase`.)
+5. **Initialization:** If no knowledgebase is found by any of the above, run the Initialization Flow (see below).
 
-Local discovery (steps 1–2) always takes priority over the stored config path. This lets different workspaces maintain independent knowledgebases while the config acts as a global fallback.
+Local discovery (steps 1–2) always takes priority over config files. Workspace config (step 3) takes priority over global config (step 4). This lets different workspaces maintain independent knowledgebases while the global config acts as a fallback.
 
 Once the path is resolved, use it as the **absolute base** for all file operations in the session.
 
@@ -74,15 +75,17 @@ Print this command reference. Do not run discovery, initialization, or any file 
 ```
 Usage: /kb <command> [args]
 
-  list                   List all sub-KBs with document counts
-  list <sub-kb>          List all summaries in a sub-KB
-  search <topic>         Find relevant documents across all sub-KBs
-  add <sub-kb> <file>    Add a new source document (full pipeline)
-  update <sub-kb> [doc]  Refresh an existing summary
-  review <sub-kb>        Audit for staleness; produce a staged update plan
-  status                 Show BATCH_STATUS.md
-  new <name>             Scaffold a new sub-KB
-  init                   Set or change the knowledgebase location
+  list                          List all sub-KBs with document counts
+  list <sub-kb>                 List all summaries in a sub-KB
+  search <topic> [--tag <tag>]  Find relevant documents across all sub-KBs
+  add <sub-kb> <file>           Add a new source document (full pipeline)
+  update <sub-kb> [doc]         Refresh an existing summary
+  review <sub-kb>               Audit for staleness; produce a staged update plan
+  validate [sub-kb]             Check structural integrity (read-only)
+  export [sub-kb] [--format md|html] [--tag <tag>]  Render to merged output file
+  status                        Show BATCH_STATUS.md
+  new <name>                    Scaffold a new sub-KB
+  init                          Set or change the knowledgebase location
 ```
 
 ---
@@ -123,16 +126,20 @@ Full pipeline for adding a new source document to a sub-KB. Steps:
    - DOCX → use `extract_docx.py` (in this skill's `scripts/` folder) to extract text
    - Markdown/text → read directly
    - Excel/XLSX → use `extract_xlsx.py` (in this skill's `scripts/` folder) to extract data
+   - HTML file or URL → use `extract_html.py` (in this skill's `scripts/` folder) to extract text
+   - CSV → use `extract_csv.py` (in this skill's `scripts/` folder) to extract data
 3. **Extract text** — for PDFs, extract in sections (respect the 80,000 char limit in extract_pdf.py). Read the TOC page(s) first to identify structure, then extract relevant sections. For DOCX, run with `--headings-only` first to map structure, then run without flags for full content.
 4. **Draft summary** — follow the standard summary format (see `references/kb-structure.md`):
+   - YAML front-matter block (required): `source_file`, `version`, `date_added`, `last_updated`, `tags`, `checksum_sha256`
    - Title + one-line hook
    - Purpose, Scope, Key Sections, Critical Controls/Requirements
    - Workspace Relevance
    - File should be named `summary_<source>-<version>.md` in kebab-case
 5. **Place the summary** in `knowledgebase/<sub-kb>/summary_<name>.md`
 6. **Copy or confirm** the source file is in `knowledgebase/<sub-kb>/_source/`
-7. **Update INDEX.md** — add an entry for the new document in the correct section, add cross-references if relevant, update the quick-lookup table if applicable
-8. **Update BATCH_STATUS.md** — add a new completed batch entry with today's date and the summary filename
+7. **Compute and record checksum** — compute the SHA-256 of the source file and write it into the summary's `checksum_sha256` front-matter field. Use: `python -c "import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" <source-path>`
+8. **Update INDEX.md** — add an entry for the new document in the correct section, add cross-references if relevant, update the quick-lookup table if applicable
+9. **Update BATCH_STATUS.md** — add a new completed batch entry with today's date and the summary filename
 
 Run `extract_pdf.py` as: `uv run --python 3.12 --with pymupdf <path-to-script> <pdf-path> [start_page] [end_page]`
 
@@ -169,6 +176,7 @@ Then for each existing summary, assess staleness using these signals:
 | Signal | How to detect |
 |---|---|
 | **No summary** | Source file in `_source/` with no matching `summary_*.md` |
+| **Checksum mismatch** | Compute SHA-256 of the current source file; compare to `checksum_sha256` in the summary's front-matter. A mismatch means the source file changed since the summary was written. (Only applicable to summaries that have the front-matter field.) |
 | **Version mismatch** | Source filename contains a version/date newer than what the summary filename implies (e.g., `_source/NIST-SP-800-53r6.pdf` but summary is `summary_nist-sp-800-53r5.md`) |
 | **Superseded standard** | Read the first page of the source PDF and check for a "superseded by" or "withdrawn" notice; or the summary itself mentions it was superseded |
 | **Aged summary** | BATCH_STATUS.md shows this summary was last touched more than 12 months ago AND the framework is known to publish on a regular revision cycle (NIST, OWASP, FedRAMP, CIS, PCI DSS) |
@@ -240,6 +248,79 @@ Read and display `knowledgebase/BATCH_STATUS.md`. If it doesn't exist, scan the 
 
 ---
 
+### `/kb validate [sub-kb]`
+
+Read-only structural integrity check. Makes no changes.
+
+**No argument:** Validate all sub-KBs.
+
+**With sub-KB name:** Validate only that sub-KB.
+
+For each sub-KB being validated, check and report:
+
+| Check | Pass | Fail |
+|---|---|---|
+| INDEX.md exists | ✓ | "Missing INDEX.md" |
+| Every `summary_*.md` listed in INDEX.md exists on disk | ✓ | "INDEX references missing file: <filename>" |
+| Every `summary_*.md` on disk is referenced in INDEX.md | ✓ | "Orphaned summary (not in INDEX): <filename>" |
+| Every source file referenced in summary front-matter (`source_file`) exists in `_source/` | ✓ | "Missing source: <filename> (referenced in <summary>)" |
+| Summary front-matter is parseable YAML with all required fields | ✓ | "Malformed front-matter in <filename>: missing <field>" |
+
+Print a structured report:
+
+```
+KB Validate: knowledgebase/<sub-kb>/
+  ✓ INDEX.md present
+  ✓ 46 summaries — all referenced in INDEX, all files exist
+  ✗ Orphaned summary: summary_old-guide.md (not in INDEX.md)
+  ✗ Missing source: _source/nist-ai-rmf-1.1.pdf (referenced in summary_nist-ai-rmf.md)
+  ✗ Malformed front-matter in summary_cis-controls-v8.md: missing 'checksum_sha256'
+
+Issues found: 3   Clean: 43
+```
+
+If no issues: print "All checks passed — <N> summaries clean."
+
+---
+
+### `/kb export [sub-kb] [--format md|html] [--tag <tag>]`
+
+Render KB summaries to a single merged output file for offline use, sharing, or review.
+
+**Arguments:**
+- `[sub-kb]` — export one sub-KB; omit to export all sub-KBs
+- `--format md` (default) — merged Markdown file
+- `--format html` — self-contained HTML with basic styling (headings, code blocks)
+- `--tag <tag>` — include only summaries whose front-matter `tags` list contains `<tag>`
+
+**Behavior:**
+
+1. Resolve the sub-KB(s) to export.
+2. If `--tag` is specified, read the front-matter of each `summary_*.md` and skip files whose `tags` list doesn't include the requested tag. (Summaries with no front-matter are skipped with a warning.)
+3. Sort summaries alphabetically by filename within each sub-KB.
+4. Concatenate all selected summaries into a single output, prefixed by a generated table of contents:
+   ```
+   # KB Export: <sub-kb> [tag: <tag>]
+   Generated: YYYY-MM-DD
+   Documents: N
+
+   ## Table of Contents
+   1. [Document Title](#anchor)
+   ...
+
+   ---
+   [summary content]
+   ```
+5. For `--format html`: wrap in a minimal `<html>` document with `<style>` block (monospace pre blocks, readable sans-serif body, max-width 900px).
+6. Write output to `knowledgebase/<sub-kb>/export_<sub-kb>_<date>[_<tag>].<ext>` and print the path.
+
+**Example outputs:**
+- `export_security_2025-06-01.md`
+- `export_security_2025-06-01_fedramp.html`
+- `export_all_2025-06-01.md` (when no sub-KB specified)
+
+---
+
 ### `/kb new <name>`
 
 Scaffold a new sub-KB named `<name>` inside the resolved `knowledgebase/` folder:
@@ -271,8 +352,10 @@ Scripts live in this skill's `scripts/` subdirectory:
 | `extract_pdf.py` | Extract text from a PDF by page range | `python extract_pdf.py <path> [start] [end]` |
 | `extract_docx.py` | Extract text and tables from a DOCX file | `python extract_docx.py <path> [--headings-only] [--tables-only] [--max-rows N]` |
 | `extract_xlsx.py` | Extract data from any XLSX spreadsheet | `python extract_xlsx.py <path> [--sheet Name] [--headers-only] [--max-rows N]` |
+| `extract_html.py` | Extract readable text from a URL or local HTML file | `python extract_html.py <url-or-path> [--selector CSS] [--headings-only] [--max-chars N]` |
+| `extract_csv.py` | Extract data from a CSV file (stdlib only) | `python extract_csv.py <path> [--columns A,B] [--headers-only] [--max-rows N] [--delimiter C]` |
 
-To run scripts, use `uv run --python 3.12 --with <dep> <script> <args>` or `python <script> <args>` if dependencies are already installed. Key dependencies: `pymupdf` (fitz) for PDF extraction, `python-docx` for DOCX, `openpyxl` for Excel.
+To run scripts, use `uv run --python 3.12 --with <dep> <script> <args>` or `python <script> <args>` if dependencies are already installed. Key dependencies: `pymupdf` (fitz) for PDF extraction, `python-docx` for DOCX, `openpyxl` for Excel, `requests beautifulsoup4` for HTML. CSV uses stdlib only.
 
 Domain-specific scripts (e.g., parsers for a fixed spreadsheet schema or diagram generators) belong in your sub-KB's own `scripts/` directory, not here. See `examples/domain-specific/` for examples.
 
