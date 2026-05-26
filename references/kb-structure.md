@@ -26,11 +26,34 @@ Examples:
 - `summary_owasp-wstg-v4.2.md`
 - `summary_cis-controls-v8.md`
 
+## Summary File Front-Matter
+
+Every summary **must** begin with a YAML front-matter block. This is the canonical schema:
+
+```yaml
+---
+source_file: _source/<filename-with-extension>
+version: "<version-string>"        # e.g. "r5", "v4.2", "2024-01", "n/a"
+date_added: YYYY-MM-DD
+last_updated: YYYY-MM-DD           # same as date_added on first add
+tags: [tag1, tag2, tag3]           # lowercase, hyphenated; see tag guidance below
+checksum_sha256: <64-char hex>     # SHA-256 of the source file at add-time
+---
+```
+
+**Tag guidance:** Use concise, reusable labels. Examples: `nist`, `fedramp`, `owasp`, `cloud`, `zero-trust`, `ai-security`, `incident-response`, `controls`, `federal`, `access-control`. Tags drive `/kb search --tag` filtering and `/kb export --tag` scoping.
+
+**Checksum:** Compute with `python -c "import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" <path>`. Used by `/kb review` to detect source file changes deterministically.
+
 ## Summary File Structure
 
-Every summary should follow this order:
+Every summary should follow this order (after the front-matter block):
 
 ```markdown
+---
+[front-matter as above]
+---
+
 # [Full Document Title]
 **One-line hook:** What this document does and why it matters.
 
