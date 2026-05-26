@@ -5,7 +5,7 @@ A [Claude Code](https://claude.ai/code) skill for building and maintaining a loc
 ## What it does
 
 - **Organizes** reference documents into sub-KBs (topic folders), each with an index and source files
-- **Extracts** text from PDFs, DOCX, XLSX, and Markdown files using bundled scripts
+- **Extracts** text from PDFs, DOCX, XLSX, HTML pages, CSV files, and Markdown using bundled scripts
 - **Summarizes** source documents into structured, searchable summary files
 - **Indexes** everything so you can search by topic across all sub-KBs
 - **Tracks** batch status so you know what's been added and when
@@ -24,16 +24,18 @@ A [Claude Code](https://claude.ai/code) skill for building and maintaining a loc
 ## Commands
 
 ```
-/kb                        Show this command reference
-/kb list                   List all sub-KBs with document counts
-/kb list <sub-kb>          List all summaries in a sub-KB
-/kb search <topic>         Find relevant documents across all sub-KBs
-/kb add <sub-kb> <file>    Add a new source document (full pipeline)
-/kb update <sub-kb> [doc]  Refresh an existing summary
-/kb review <sub-kb>        Audit for staleness; produce a staged update plan
-/kb status                 Show batch status across all sub-KBs
-/kb new <name>             Scaffold a new sub-KB
-/kb init                   Set or change the knowledgebase location
+/kb                                               Show this command reference
+/kb list                                          List all sub-KBs with document counts
+/kb list <sub-kb>                                 List all summaries in a sub-KB
+/kb search <topic> [--tag <tag>]                  Find relevant documents across all sub-KBs
+/kb add <sub-kb> <file>                           Add a new source document (full pipeline)
+/kb update <sub-kb> [doc]                         Refresh an existing summary
+/kb review <sub-kb>                               Audit for staleness; produce a staged update plan
+/kb validate [sub-kb]                             Check structural integrity (read-only)
+/kb export [sub-kb] [--format md|html] [--tag T]  Render to a merged output file
+/kb status                                        Show batch status across all sub-KBs
+/kb new <name>                                    Scaffold a new sub-KB
+/kb init                                          Set or change the knowledgebase location
 ```
 
 ## Knowledgebase structure
@@ -59,8 +61,9 @@ The skill finds your knowledgebase in this order:
 
 1. `knowledgebase/` in the current working directory
 2. `knowledgebase/` one level up (for running inside a project subfolder)
-3. Path stored in `~/.claude/skills/kb/config.json`
-4. If none found: prompts to create one
+3. Path in `.kb-config.json` in the current working directory (per-project override)
+4. Path stored in `~/.claude/skills/kb/config.json` (global fallback)
+5. If none found: prompts to create one
 
 ## Scripts
 
@@ -69,6 +72,8 @@ The skill finds your knowledgebase in this order:
 | `extract_pdf.py` | Extract text from a PDF by page range | `uv run --python 3.12 --with pymupdf extract_pdf.py <path> [start] [end]` |
 | `extract_docx.py` | Extract text and tables from a DOCX file | `uv run --python 3.12 --with python-docx extract_docx.py <path> [--headings-only] [--max-rows N]` |
 | `extract_xlsx.py` | Extract data from any XLSX spreadsheet | `uv run --python 3.12 --with openpyxl extract_xlsx.py <path> [--sheet Name] [--headers-only] [--max-rows N]` |
+| `extract_html.py` | Extract readable text from a URL or local HTML file | `uv run --python 3.12 --with requests --with beautifulsoup4 extract_html.py <url-or-path> [--selector CSS] [--headings-only] [--max-chars N]` |
+| `extract_csv.py` | Extract data from a CSV file (no extra deps) | `python extract_csv.py <path> [--columns A,B] [--headers-only] [--max-rows N] [--delimiter C]` |
 
 ### Domain-specific scripts
 
@@ -81,6 +86,8 @@ Scripts use [`uv`](https://github.com/astral-sh/uv) for isolated dependency mana
 - `pymupdf` (fitz) — PDF extraction
 - `python-docx` — DOCX extraction
 - `openpyxl` — XLSX extraction
+- `requests` + `beautifulsoup4` — HTML extraction
+- CSV extraction uses the Python standard library only — no install needed
 
 Install `uv` once: `pip install uv`
 
