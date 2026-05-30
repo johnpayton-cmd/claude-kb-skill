@@ -54,11 +54,36 @@ The user chooses the **parent directory**. The skill always creates a folder nam
 5. Using the confirmed, validated parent directory:
    a. Create `<parent>/knowledgebase/`
    b. Create a minimal `<parent>/knowledgebase/BATCH_STATUS.md` with a placeholder header.
-5. Store the resolved path in `~/.claude/skills/kb/config.json`:
+6. Store the resolved path in `~/.claude/skills/kb/config.json`:
    ```json
    {"knowledgebase_path": "<parent>/knowledgebase"}
    ```
-6. Confirm: "Knowledgebase created at `<parent>/knowledgebase`. Create your first sub-KB with `/kb new <name>`."
+7. **Check dependencies** — run each check and report results:
+
+   | Dependency | Check command | Used by |
+   |---|---|---|
+   | Python 3.x | `python --version` | all scripts |
+   | uv | `uv --version` | recommended script runner |
+   | pymupdf | `python -c "import fitz"` | `extract_pdf.py` |
+   | python-docx | `python -c "import docx"` | `extract_docx.py` |
+   | openpyxl | `python -c "import openpyxl"` | `extract_xlsx.py` |
+   | requests | `python -c "import requests"` | `extract_html.py` |
+   | beautifulsoup4 | `python -c "import bs4"` | `extract_html.py` |
+
+   Print a report:
+   ```
+   Dependency check:
+     ✓ Python 3.12.3
+     ✓ uv 0.4.2
+     ✓ pymupdf
+     ✗ python-docx   → pip install python-docx
+     ✓ openpyxl
+     ✗ requests      → pip install requests
+     ✗ beautifulsoup4 → pip install beautifulsoup4
+   ```
+   Missing dependencies do not block initialization — they are only needed when using the relevant extractor. If anything is missing, note: "Install missing packages before using those extractors."
+
+8. Confirm: "Knowledgebase created at `<parent>/knowledgebase`. Create your first sub-KB with `/kb new <name>`."
 
 **Config file:** `~/.claude/skills/kb/config.json`
 ```json
