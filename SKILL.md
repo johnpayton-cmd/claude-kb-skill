@@ -86,7 +86,14 @@ Usage: /kb <command> [args]
   status                        Show BATCH_STATUS.md
   new <name>                    Scaffold a new sub-KB
   init                          Set or change the knowledgebase location
+  help                          Show this command reference
 ```
+
+---
+
+### `/kb help`
+
+Alias for bare `/kb`. Print the command reference above. No discovery, no file operations.
 
 ---
 
@@ -121,25 +128,31 @@ list from it. If INDEX.md doesn't exist, list `summary_*.md` files directly.
 Full pipeline for adding a new source document to a sub-KB. Steps:
 
 1. **Verify** the sub-KB exists (`knowledgebase/<sub-kb>/`). If not, ask whether to create it first.
-2. **Determine document type:**
+2. **Resolve source:** If `<source-path>` starts with `http://` or `https://`, download the file before doing anything else:
+   - Detect the file type from the URL extension (`.pdf`, `.docx`, `.xlsx`, `.csv`) or the HTTP `Content-Type` response header.
+   - Download to `knowledgebase/<sub-kb>/_source/<filename>` (derive filename from the URL path; add a datestamp if the name is ambiguous).
+   - Use the downloaded local file as `<source-path>` for all subsequent steps.
+   - If the URL has no recognizable document extension and `Content-Type` is `text/html`, treat it as an HTML page and use `extract_html.py` instead.
+   - Download command: `python -c "import urllib.request,sys; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])" <url> <dest-path>`
+3. **Determine document type:**
    - PDF → use `extract_pdf.py` (in this skill's `scripts/` folder) to extract text
    - DOCX → use `extract_docx.py` (in this skill's `scripts/` folder) to extract text
    - Markdown/text → read directly
    - Excel/XLSX → use `extract_xlsx.py` (in this skill's `scripts/` folder) to extract data
-   - HTML file or URL → use `extract_html.py` (in this skill's `scripts/` folder) to extract text
+   - HTML file or HTML URL → use `extract_html.py` (in this skill's `scripts/` folder) to extract text
    - CSV → use `extract_csv.py` (in this skill's `scripts/` folder) to extract data
-3. **Extract text** — for PDFs, extract in sections (respect the 80,000 char limit in extract_pdf.py). Read the TOC page(s) first to identify structure, then extract relevant sections. For DOCX, run with `--headings-only` first to map structure, then run without flags for full content.
-4. **Draft summary** — follow the standard summary format (see `references/kb-structure.md`):
+4. **Extract text** — for PDFs, extract in sections (respect the 80,000 char limit in extract_pdf.py). Read the TOC page(s) first to identify structure, then extract relevant sections. For DOCX, run with `--headings-only` first to map structure, then run without flags for full content.
+5. **Draft summary** — follow the standard summary format (see `references/kb-structure.md`):
    - YAML front-matter block (required): `source_file`, `version`, `date_added`, `last_updated`, `tags`, `checksum_sha256`
    - Title + one-line hook
    - Purpose, Scope, Key Sections, Critical Controls/Requirements
    - Workspace Relevance
    - File should be named `summary_<source>-<version>.md` in kebab-case
-5. **Place the summary** in `knowledgebase/<sub-kb>/summary_<name>.md`
-6. **Copy or confirm** the source file is in `knowledgebase/<sub-kb>/_source/`
-7. **Compute and record checksum** — compute the SHA-256 of the source file and write it into the summary's `checksum_sha256` front-matter field. Use: `python -c "import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" <source-path>`
-8. **Update INDEX.md** — add an entry for the new document in the correct section, add cross-references if relevant, update the quick-lookup table if applicable
-9. **Update BATCH_STATUS.md** — add a new completed batch entry with today's date and the summary filename
+6. **Place the summary** in `knowledgebase/<sub-kb>/summary_<name>.md`
+7. **Copy or confirm** the source file is in `knowledgebase/<sub-kb>/_source/` (URL sources are already there from step 2)
+8. **Compute and record checksum** — compute the SHA-256 of the source file and write it into the summary's `checksum_sha256` front-matter field. Use: `python -c "import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" <source-path>`
+9. **Update INDEX.md** — add an entry for the new document in the correct section, add cross-references if relevant, update the quick-lookup table if applicable
+10. **Update BATCH_STATUS.md** — add a new completed batch entry with today's date and the summary filename
 
 Run `extract_pdf.py` as: `uv run --python 3.12 --with pymupdf <path-to-script> <pdf-path> [start_page] [end_page]`
 

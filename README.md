@@ -36,6 +36,7 @@ A [Claude Code](https://claude.ai/code) skill for building and maintaining a loc
 /kb status                                        Show batch status across all sub-KBs
 /kb new <name>                                    Scaffold a new sub-KB
 /kb init                                          Set or change the knowledgebase location
+/kb help                                          Show this command reference
 ```
 
 ## Knowledgebase structure
