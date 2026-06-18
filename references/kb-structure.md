@@ -18,17 +18,25 @@ knowledgebase/
 
 ## Summary File Naming
 
-`summary_<source>-<document>-<version>.md` — all kebab-case, lowercase.
+`summary_<name>.md` — all kebab-case, lowercase. The `<name>` is the document's short
+identifier. Include a version suffix **only when needed to disambiguate editions of the
+same document** (e.g. two RAR template versions kept side by side); most summaries are
+versionless because the version lives inside the front-matter.
 
 Examples:
-- `summary_nist-sp-800-53r5.md`
-- `summary_fedramp-csp-playbook.md`
-- `summary_owasp-wstg-v4.2.md`
+- `summary_nist-sp-800-53r5.md`         (revision is part of the document's name)
+- `summary_fedramp-csp-playbook.md`     (versionless — normal case)
 - `summary_cis-controls-v8.md`
+- `summary_fedramp-rar-high-template-v1.7.md`  (suffix disambiguates from v1.4)
 
 ## Summary File Front-Matter
 
 Every summary **must** begin with a YAML front-matter block. This is the canonical schema:
+
+> **Migration note:** Summaries created before front-matter became standard use a legacy
+> bold-header (`**Version/Date:** … | **File:** …`) instead. These are valid for lookup but
+> are being backfilled to the schema below. `/kb validate` reports an un-migrated summary as
+> a **warning** ("needs front-matter backfill"), not a failure.
 
 ```yaml
 ---

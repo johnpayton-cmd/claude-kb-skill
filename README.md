@@ -39,6 +39,14 @@ A [Claude Code](https://claude.ai/code) skill for building and maintaining a loc
 /kb help                                          Show this command reference
 ```
 
+> **Note on HTML export:** `/kb export --format html` produces a deliberately minimal,
+> self-contained HTML file. A richer, branded multi-page HTML "hub" generator
+> (`private/generate_kb_site.py`) is intentionally kept private (an Invictrix-specific
+> feature) and is **not** part of this repository. The public skill is complete without it.
+>
+> `/kb export all` skips any sub-KB listed in the `export_exclude` array of `config.json`,
+> so internal sub-KBs stay out of bulk exports (they remain exportable when named explicitly).
+
 ## Knowledgebase structure
 
 ```
@@ -75,6 +83,10 @@ The skill finds your knowledgebase in this order:
 | `extract_xlsx.py` | Extract data from any XLSX spreadsheet | `uv run --python 3.12 --with openpyxl extract_xlsx.py <path> [--sheet Name] [--headers-only] [--max-rows N]` |
 | `extract_html.py` | Extract readable text from a URL or local HTML file | `uv run --python 3.12 --with requests --with beautifulsoup4 extract_html.py <url-or-path> [--selector CSS] [--headings-only] [--max-chars N]` |
 | `extract_csv.py` | Extract data from a CSV file (no extra deps) | `python extract_csv.py <path> [--columns A,B] [--headers-only] [--max-rows N] [--delimiter C]` |
+
+> **Note:** `/kb add <url>` and `extract_html.py` fetch the URL you provide. Fetching is
+> limited to `http`/`https` and blocks loopback/link-local/metadata hosts, but it is not a
+> hardened proxy — use it only with trusted, public source documents.
 
 ### Domain-specific scripts
 

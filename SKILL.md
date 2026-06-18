@@ -130,9 +130,13 @@ Alias for bare `/kb`. Print the command reference above. No discovery, no file o
 ```
 sub-kb      docs  index
 ----------  ----  -----
-security      46  ✓
-coding        10  ✓
+security      56  ✓
+coding        18  ✓
 ```
+
+The `docs` count reflects `summary_*.md` files only. Verbatim subfolder content (e.g. the
+20 `800-53a-procedures/*.md` files in the security KB) is catalogued separately in INDEX.md
+and is not included in this count — so `security = 56` is expected and correct.
 
 **With sub-KB name:** Read `knowledgebase/<sub-kb>/INDEX.md` and print the document
 list from it. If INDEX.md doesn't exist, list `summary_*.md` files directly.
@@ -158,6 +162,7 @@ Full pipeline for adding a new source document to a sub-KB. Steps:
    - Download to `knowledgebase/<sub-kb>/_source/<filename>` (derive filename from the URL path; add a datestamp if the name is ambiguous).
    - Use the downloaded local file as `<source-path>` for all subsequent steps.
    - If the URL has no recognizable document extension and `Content-Type` is `text/html`, treat it as an HTML page and use `extract_html.py` instead.
+   - Only `http`/`https` URLs are fetched. Do not download from internal/link-local hosts (`localhost`, `127.0.0.0/8`, `169.254.169.254`, cloud metadata endpoints) — `/kb add <url>` is for public source documents from trusted origins.
    - Download command: `python -c "import urllib.request,sys; urllib.request.urlretrieve(sys.argv[1], sys.argv[2])" <url> <dest-path>`
 3. **Determine document type:**
    - PDF → use `extract_pdf.py` (in this skill's `scripts/` folder) to extract text
@@ -167,12 +172,12 @@ Full pipeline for adding a new source document to a sub-KB. Steps:
    - HTML file or HTML URL → use `extract_html.py` (in this skill's `scripts/` folder) to extract text
    - CSV → use `extract_csv.py` (in this skill's `scripts/` folder) to extract data
 4. **Extract text** — for PDFs, extract in sections (respect the 80,000 char limit in extract_pdf.py). Read the TOC page(s) first to identify structure, then extract relevant sections. For DOCX, run with `--headings-only` first to map structure, then run without flags for full content.
-5. **Draft summary** — follow the standard summary format (see `references/kb-structure.md`):
-   - YAML front-matter block (required): `source_file`, `version`, `date_added`, `last_updated`, `tags`, `checksum_sha256`
+5. **Draft summary** — follow the standard summary format (see `references/kb-structure.md`). Every newly added summary must include the full YAML front-matter block (the pipeline below computes the checksum in step 8):
+   - YAML front-matter block (required for new docs): `source_file`, `version`, `date_added`, `last_updated`, `tags`, `checksum_sha256`
    - Title + one-line hook
    - Purpose, Scope, Key Sections, Critical Controls/Requirements
    - Workspace Relevance
-   - File should be named `summary_<source>-<version>.md` in kebab-case
+   - File should be named `summary_<name>.md` in kebab-case (version suffix only to disambiguate editions)
 6. **Place the summary** in `knowledgebase/<sub-kb>/summary_<name>.md`
 7. **Copy or confirm** the source file is in `knowledgebase/<sub-kb>/_source/` (URL sources are already there from step 2)
 8. **Compute and record checksum** — compute the SHA-256 of the source file and write it into the summary's `checksum_sha256` front-matter field. Use: `python -c "import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" <source-path>`
@@ -215,7 +220,7 @@ Then for each existing summary, assess staleness using these signals:
 |---|---|
 | **No summary** | Source file in `_source/` with no matching `summary_*.md` |
 | **Checksum mismatch** | Compute SHA-256 of the current source file; compare to `checksum_sha256` in the summary's front-matter. A mismatch means the source file changed since the summary was written. (Only applicable to summaries that have the front-matter field.) |
-| **Version mismatch** | Source filename contains a version/date newer than what the summary filename implies (e.g., `_source/NIST-SP-800-53r6.pdf` but summary is `summary_nist-sp-800-53r5.md`) |
+| **Version mismatch** | Source filename contains a version/date newer than the version recorded **inside** the summary — its front-matter `version` field, or the legacy `**Version/Date:**` header line if no front-matter exists (e.g., `_source/NIST-SP-800-53r6.pdf` but the summary records r5). Do not rely on a version in the summary *filename* — most summaries are versionless. |
 | **Superseded standard** | Read the first page of the source PDF and check for a "superseded by" or "withdrawn" notice; or the summary itself mentions it was superseded |
 | **Aged summary** | BATCH_STATUS.md shows this summary was last touched more than 12 months ago AND the framework is known to publish on a regular revision cycle (NIST, OWASP, FedRAMP, CIS, PCI DSS) |
 | **Missing from INDEX** | `summary_*.md` file exists but is not referenced in INDEX.md |
@@ -301,23 +306,28 @@ For each sub-KB being validated, check and report:
 | INDEX.md exists | ✓ | "Missing INDEX.md" |
 | Every `summary_*.md` listed in INDEX.md exists on disk | ✓ | "INDEX references missing file: <filename>" |
 | Every `summary_*.md` on disk is referenced in INDEX.md | ✓ | "Orphaned summary (not in INDEX): <filename>" |
-| Every source file referenced in summary front-matter (`source_file`) exists in `_source/` | ✓ | "Missing source: <filename> (referenced in <summary>)" |
-| Summary front-matter is parseable YAML with all required fields | ✓ | "Malformed front-matter in <filename>: missing <field>" |
+| Every file linked from INDEX.md exists on disk (includes subfolder content like `800-53a-procedures/AC.md`, not just `summary_*.md`) | ✓ | "INDEX links missing file: <path>" |
+| INDEX document count matches reality | ✓ | "Count drift: INDEX header says <N>, found <M> summaries" |
+| Every source file referenced in summary front-matter (`source_file`) exists in `_source/` | ✓ | "Missing source: <filename> (referenced in <summary>)" — *checked only when front-matter is present* |
+| Summary front-matter present and parseable | ✓ | If a block is present but malformed/incomplete → **fail**: "Malformed front-matter in <filename>: missing <field>". If no block is present (legacy bold-header) → **warning**, not a failure: "Needs front-matter backfill: <filename>" |
 
 Print a structured report:
 
 ```
 KB Validate: knowledgebase/<sub-kb>/
   ✓ INDEX.md present
-  ✓ 46 summaries — all referenced in INDEX, all files exist
+  ✓ 56 summaries — all referenced in INDEX, all files exist
   ✗ Orphaned summary: summary_old-guide.md (not in INDEX.md)
   ✗ Missing source: _source/nist-ai-rmf-1.1.pdf (referenced in summary_nist-ai-rmf.md)
   ✗ Malformed front-matter in summary_cis-controls-v8.md: missing 'checksum_sha256'
+  ⚠ Needs front-matter backfill: summary_fips-199.md
 
-Issues found: 3   Clean: 43
+Failures: 3   Warnings: 1   Clean: 52
 ```
 
-If no issues: print "All checks passed — <N> summaries clean."
+Failures (✗) are integrity problems that should be fixed. Warnings (⚠) — currently only
+"needs front-matter backfill" — are legacy summaries that still work but predate the
+front-matter schema. If no failures and no warnings: print "All checks passed — <N> summaries clean."
 
 ---
 
@@ -326,14 +336,18 @@ If no issues: print "All checks passed — <N> summaries clean."
 Render KB summaries to a single merged output file for offline use, sharing, or review.
 
 **Arguments:**
-- `[sub-kb]` — export one sub-KB; omit to export all sub-KBs
+- `[sub-kb]` — export one sub-KB; omit to export all sub-KBs (excluding any listed in `export_exclude`, see below)
 - `--format md` (default) — merged Markdown file
 - `--format html` — self-contained HTML with basic styling (headings, code blocks)
 - `--tag <tag>` — include only summaries whose front-matter `tags` list contains `<tag>`
 
 **Behavior:**
 
-1. Resolve the sub-KB(s) to export.
+1. Resolve the sub-KB(s) to export. When no sub-KB is named (export all), skip any sub-KB
+   listed in the `export_exclude` array in `config.json` — this keeps internal/private
+   sub-KBs out of a bulk export. A sub-KB in `export_exclude` is still exported when it is
+   named explicitly (e.g. `/kb export music`); the exclusion only applies to "export all".
+   If `export_exclude` is absent, nothing is excluded.
 2. If `--tag` is specified, read the front-matter of each `summary_*.md` and skip files whose `tags` list doesn't include the requested tag. (Summaries with no front-matter are skipped with a warning.)
 3. Sort summaries alphabetically by filename within each sub-KB.
 4. Concatenate all selected summaries into a single output, prefixed by a generated table of contents:
@@ -403,7 +417,7 @@ Domain-specific scripts (e.g., parsers for a fixed spreadsheet schema or diagram
 
 - Sub-KB names are discovered dynamically — never hardcode `security` or `coding`
 - The `_source/` subdirectory holds original source files (PDFs, XLSX, DOCX, etc.) — source documents are kept out of context unless specifically required; always use `summary_*.md` files for lookups and answers
-- Summary naming convention: `summary_<framework>-<document>-<version>.md` (kebab-case)
+- Summary naming convention: `summary_<name>.md` (kebab-case); add a version suffix only to disambiguate editions of the same document — most summaries are versionless (version lives in front-matter)
 - BATCH_STATUS.md at `knowledgebase/` root tracks all sub-KBs in one place
 - When adding documents, always read the source INDEX.md before updating it to avoid duplicating sections
 - Config file: `~/.claude/skills/kb/config.json` — stores the absolute path to the `knowledgebase/` folder; local discovery (CWD / parent) always takes priority over this file

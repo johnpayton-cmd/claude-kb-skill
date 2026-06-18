@@ -21,3 +21,6 @@ config.json
 *.swp
 *.swo
 Thumbs.db
+
+# Private Invictrix knowledge-hub feature (do not publish)
+private/

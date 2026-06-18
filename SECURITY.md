@@ -17,6 +17,14 @@ Include in your report:
 
 This is a solo-maintained open source project. I will review reports and respond on a best-effort basis. There is no guaranteed response SLA. I appreciate your patience and your responsible disclosure.
 
+## Usage caveat — `/kb add <url>`
+
+The `add` pipeline and `extract_html.py` fetch whatever URL they are given. Fetching is
+restricted to `http`/`https` and blocks loopback/link-local/cloud-metadata hosts as a
+lightweight SSRF guard, but it is **not** a hardened proxy. Run `/kb add <url>` only against
+**trusted, public source documents** — treat an untrusted URL the same as any untrusted
+input.
+
 ## Scope
 
 This policy applies to the `claude-kb-skill` repository. Vulnerabilities in upstream dependencies (pymupdf, python-docx, openpyxl) should be reported to their respective maintainers.

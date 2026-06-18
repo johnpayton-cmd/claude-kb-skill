@@ -27,13 +27,41 @@ import re
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
 
+# Hosts that must never be fetched — loopback, link-local, and cloud metadata.
+# Lightweight SSRF guard appropriate for a human-driven local tool, not a full proxy.
+_BLOCKED_HOSTS = {
+    "localhost", "127.0.0.1", "0.0.0.0", "::1",
+    "169.254.169.254",          # AWS/GCP/Azure instance metadata
+    "metadata.google.internal",
+}
+
+
+def _check_url_host(url):
+    """Reject obviously-internal hosts before any network request is made."""
+    from urllib.parse import urlparse
+    host = (urlparse(url).hostname or "").lower()
+    if host in _BLOCKED_HOSTS or host.startswith("127.") or host.startswith("169.254."):
+        raise ValueError(
+            f"Refusing to fetch internal/link-local host: {host!r}. "
+            "extract_html.py only fetches public web pages."
+        )
+
+
 def _get_html(source):
     """Return raw HTML from a URL or local file path."""
     if source.startswith("http://") or source.startswith("https://"):
         import requests
+        _check_url_host(source)
         resp = requests.get(source, timeout=30, headers={"User-Agent": "Mozilla/5.0 (KB-extractor)"})
         resp.raise_for_status()
         return resp.text, source
+    elif re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", source):
+        # Has a URL scheme that isn't http/https (file:, ftp:, gopher:, …) — reject
+        # explicitly rather than silently treating it as a local path. Windows paths
+        # like C:\ or C:/ have no '://' and correctly fall through to the file branch.
+        raise ValueError(
+            f"Unsupported URL scheme in {source!r}. Use http(s):// or a local file path."
+        )
     else:
         with open(source, encoding="utf-8", errors="replace") as f:
             return f.read(), source
@@ -106,9 +134,13 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    extract_html(
-        args.source,
-        selector=args.selector,
-        headings_only=args.headings_only,
-        max_chars=args.max_chars,
-    )
+    try:
+        extract_html(
+            args.source,
+            selector=args.selector,
+            headings_only=args.headings_only,
+            max_chars=args.max_chars,
+        )
+    except (ValueError, OSError) as e:
+        print(f"extract_html.py: {e}", file=sys.stderr)
+        sys.exit(2)
