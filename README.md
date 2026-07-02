@@ -10,16 +10,13 @@ A [Claude Code](https://claude.ai/code) skill for building and maintaining a loc
 - **Indexes** everything so you can search by topic across all sub-KBs
 - **Tracks** batch status so you know what's been added and when
 - **Reviews** sub-KBs for staleness and produces tiered update plans
+- **Consults proactively** — an optional hook makes Claude check the KB before answering from training data, without you typing `/kb` (see [Proactive consultation](#proactive-consultation))
 
 ## Installation
 
 1. Copy this directory to `~/.claude/skills/kb/`
-2. In your `CLAUDE.md`, add:
-   ```
-   ### kb (~/.claude/skills/kb/)
-   Knowledgebase navigation and maintenance skill. Invoke with /kb.
-   ```
-3. Run any action command (e.g. `/kb list`) — if no knowledgebase exists yet, you'll be walked through creating one. Run `/kb init` to set it up explicitly. `/kb` alone always shows usage regardless of KB state.
+2. Run `/kb init` — this sets up (or points to) your knowledgebase location **and offers to install the proactive-consultation hook** (confirmation-gated). Running any action command (e.g. `/kb list`) also walks you through creation if no knowledgebase exists yet. `/kb` alone always shows usage regardless of KB state.
+3. *(Optional)* Add a one-line pointer to the skill in your `CLAUDE.md` if you like — it is **not** required for the skill to work or to consult the KB; proactive consultation is driven by the hook, not by `CLAUDE.md`.
 
 ## Commands
 
@@ -46,6 +43,30 @@ A [Claude Code](https://claude.ai/code) skill for building and maintaining a loc
 >
 > `/kb export all` skips any sub-KB listed in the `export_exclude` array of `config.json`,
 > so internal sub-KBs stay out of bulk exports (they remain exportable when named explicitly).
+
+## Proactive consultation
+
+A skill's description makes it *available* and routes explicit `/kb` calls, but it does **not**
+reliably make Claude consult the KB *proactively* on an ordinary question. That behavior is
+delivered by a `UserPromptSubmit` hook (`hooks/kb-consult-hook.py`) whose output is injected into
+context each turn — the same mechanism as a standing `CLAUDE.md` instruction, which is what makes
+it reliable.
+
+`/kb init` offers to install the hook for you (and any `/kb` command will offer it if it sees a
+knowledgebase but no hook). The hook is **conditional**: it emits the "consult the KB first"
+mandate only when a knowledgebase is resolvable, and stays silent otherwise, so it adds nothing
+to sessions with no KB. To install it manually, add this to `~/.claude/settings.json` (adjust the
+path; use `python3` on macOS/Linux):
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      { "hooks": [ { "type": "command", "command": "python \"~/.claude/skills/kb/hooks/kb-consult-hook.py\"" } ] }
+    ]
+  }
+}
+```
 
 ## Knowledgebase structure
 

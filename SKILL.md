@@ -2,14 +2,17 @@
 name: kb
 description: >
   Use this skill when the user types /kb or any subcommand (/kb list, /kb search,
-  /kb add, /kb update, /kb status, /kb new, /kb review). Also invoke proactively
-  when the user asks about a topic covered by a local knowledgebase sub-folder,
-  references a framework or standard that may be in the KB (NIST, FedRAMP, OWASP,
-  MITRE ATT&CK, CIS, ISO, PCI DSS, CMMC, FISMA, RMF, etc.), or when CLAUDE.md
-  directs consulting the KB before answering. Handles: KB navigation, document
-  lookup, adding new source documents (full extract → summarize → index pipeline),
-  updating existing summaries, reviewing a sub-KB for staleness and planning staged
-  updates, status tracking, and scaffolding new sub-KBs.
+  /kb add, /kb update, /kb review, /kb validate, /kb export, /kb status, /kb new,
+  /kb init). Also invoke when the user asks about a topic that a local knowledgebase
+  sub-KB covers — run /kb search or read the relevant sub-KB's INDEX.md before
+  answering. Handles: KB navigation, document lookup, adding new source documents
+  (full extract → summarize → index pipeline), updating existing summaries, reviewing
+  a sub-KB for staleness and planning staged updates, status tracking, and scaffolding
+  new sub-KBs. NOTE: reliable *proactive* consultation (checking the KB before
+  answering from training data, without the user typing /kb) is not driven by this
+  description — it is delivered by the UserPromptSubmit hook that /kb init installs
+  (see "Proactive-Consult Hook" below). A skill description surfaces availability and
+  routes explicit calls; it does not reliably trigger unprompted lookups.
 argument-hint: [list|search|add|update|review|status|new] [sub-kb] [args...]
 ---
 
@@ -38,6 +41,55 @@ List sub-KBs by enumerating subdirectories of the resolved root that contain an 
 
 ---
 
+## Proactive-Consult Hook
+
+A skill `description` reliably makes this skill *available* and routes *explicit* `/kb` calls,
+but it does **not** reliably make the model consult the KB *proactively* on an ordinary question
+(measured ~0–1/10 in testing). A `UserPromptSubmit` hook does (~10/10), because its stdout is
+injected into per-turn context. So the "consult the KB before answering from training data"
+behavior lives in a hook, not in the frontmatter.
+
+**The hook script:** `hooks/kb-consult-hook.py` (in this skill's folder). It resolves the KB
+(CWD → parent → `~/.claude/skills/kb/config.json`) and, if one exists, prints a domain-agnostic
+proactive-consult mandate; if no KB is in scope it prints nothing (zero noise in non-KB sessions).
+It is mandate-only — which sub-KB to use is decided by reading each sub-KB's INDEX `Covers:` line
+once consultation is triggered.
+
+### Installing the hook (`/kb init` and the self-heal check both use this)
+
+The hook is off until it is registered in the user's `settings.json`. **Never write it silently —
+always show the entry and ask first.** Procedure:
+
+1. Determine the absolute path to this skill's `hooks/kb-consult-hook.py`, and the Python launcher
+   (`python` on Windows, `python3` on macOS/Linux).
+2. Read `~/.claude/settings.json` (create `{}` if absent). Check `hooks.UserPromptSubmit` for an
+   entry whose command already references `kb-consult-hook.py`. **If present, do nothing** (the
+   install is idempotent).
+3. If absent, show the exact block to be added and ask the user to confirm:
+   ```json
+   {
+     "hooks": {
+       "UserPromptSubmit": [
+         { "hooks": [ { "type": "command", "command": "python \"<abs>/hooks/kb-consult-hook.py\"" } ] }
+       ]
+     }
+   }
+   ```
+   Merge into any existing `hooks.UserPromptSubmit` array — do not clobber other hooks.
+4. On confirmation, write it. If declined, print the manual-install instructions (the block above)
+   so the user can add it later. Proactive consultation stays off until the hook is installed;
+   explicit `/kb` commands work regardless.
+
+### Self-heal check (existing installs)
+
+Because `/kb init` is the installer and long-standing installs will not re-run it, **on any `/kb`
+command that successfully resolves a KB, also check whether the hook is registered in
+`settings.json`. If it is not, surface a one-time offer to install it** (using the procedure
+above) before doing the command's normal work. This is how an upgraded install with a mature KB
+and no prior hook picks up proactive consultation.
+
+---
+
 ## Initialization Flow
 
 Triggered automatically when no `knowledgebase/` folder is found via Discovery steps 1–3. Also triggered by `/kb init`.
@@ -58,7 +110,8 @@ The user chooses the **parent directory**. The skill always creates a folder nam
    ```json
    {"knowledgebase_path": "<parent>/knowledgebase"}
    ```
-7. **Check dependencies** — run each check and report results:
+7. **Install the proactive-consult hook** — offer to register the `UserPromptSubmit` hook (see "Proactive-Consult Hook" above). Confirmation-gated; skip if already present.
+8. **Check dependencies** — run each check and report results:
 
    | Dependency | Check command | Used by |
    |---|---|---|
@@ -83,7 +136,7 @@ The user chooses the **parent directory**. The skill always creates a folder nam
    ```
    Missing dependencies do not block initialization — they are only needed when using the relevant extractor. If anything is missing, note: "Install missing packages before using those extractors."
 
-8. Confirm: "Knowledgebase created at `<parent>/knowledgebase`. Create your first sub-KB with `/kb new <name>`."
+9. Confirm: "Knowledgebase created at `<parent>/knowledgebase`. Create your first sub-KB with `/kb new <name>`." If the hook was installed, add: "Proactive KB consultation is now enabled."
 
 **Config file:** `~/.claude/skills/kb/config.json`
 ```json
@@ -181,7 +234,7 @@ Full pipeline for adding a new source document to a sub-KB. Steps:
 6. **Place the summary** in `knowledgebase/<sub-kb>/summary_<name>.md`
 7. **Copy or confirm** the source file is in `knowledgebase/<sub-kb>/_source/` (URL sources are already there from step 2)
 8. **Compute and record checksum** — compute the SHA-256 of the source file and write it into the summary's `checksum_sha256` front-matter field. Use: `python -c "import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" <source-path>`
-9. **Update INDEX.md** — add an entry for the new document in the correct section, add cross-references if relevant, update the quick-lookup table if applicable
+9. **Update INDEX.md** — add an entry for the new document in the correct section, add cross-references if relevant, update the quick-lookup table if applicable, and refresh the `**Covers:**` routing line so it still reflects the sub-KB's topic span after this addition
 10. **Update BATCH_STATUS.md** — add a new completed batch entry with today's date and the summary filename
 
 Run `extract_pdf.py` as: `uv run --python 3.12 --with pymupdf <path-to-script> <pdf-path> [start_page] [end_page]`
@@ -224,6 +277,7 @@ Then for each existing summary, assess staleness using these signals:
 | **Superseded standard** | Read the first page of the source PDF and check for a "superseded by" or "withdrawn" notice; or the summary itself mentions it was superseded |
 | **Aged summary** | BATCH_STATUS.md shows this summary was last touched more than 12 months ago AND the framework is known to publish on a regular revision cycle (NIST, OWASP, FedRAMP, CIS, PCI DSS) |
 | **Missing from INDEX** | `summary_*.md` file exists but is not referenced in INDEX.md |
+| **Missing Covers line** | INDEX.md has no `**Covers:**` routing line (a legacy INDEX predating it). Stage a P3 backfill: derive the line from the INDEX's own titles/hooks/use-case table — no source re-extraction needed. Present for approval before writing. |
 
 Do not read every summary file in full — skim the first 10–15 lines to extract the
 document version/date and any supersession notice.
@@ -310,6 +364,7 @@ For each sub-KB being validated, check and report:
 | INDEX document count matches reality | ✓ | "Count drift: INDEX header says <N>, found <M> summaries" |
 | Every source file referenced in summary front-matter (`source_file`) exists in `_source/` | ✓ | "Missing source: <filename> (referenced in <summary>)" — *checked only when front-matter is present* |
 | Summary front-matter present and parseable | ✓ | If a block is present but malformed/incomplete → **fail**: "Malformed front-matter in <filename>: missing <field>". If no block is present (legacy bold-header) → **warning**, not a failure: "Needs front-matter backfill: <filename>" |
+| INDEX.md has a non-empty `**Covers:**` routing line | ✓ | **Warning**, not a failure: "Needs Covers backfill: <sub-kb>/INDEX.md" — legacy INDEXes that predate the routing line still work; `/kb review` can stage the backfill |
 
 Print a structured report:
 
@@ -325,9 +380,10 @@ KB Validate: knowledgebase/<sub-kb>/
 Failures: 3   Warnings: 1   Clean: 52
 ```
 
-Failures (✗) are integrity problems that should be fixed. Warnings (⚠) — currently only
-"needs front-matter backfill" — are legacy summaries that still work but predate the
-front-matter schema. If no failures and no warnings: print "All checks passed — <N> summaries clean."
+Failures (✗) are integrity problems that should be fixed. Warnings (⚠) — "needs front-matter
+backfill" and "needs Covers backfill" — flag legacy content that still works but predates a
+later schema addition (the front-matter block, or the INDEX `Covers:` routing line). If no
+failures and no warnings: print "All checks passed — <N> summaries clean."
 
 ---
 
@@ -380,7 +436,7 @@ Scaffold a new sub-KB named `<name>` inside the resolved `knowledgebase/` folder
 1. If `knowledgebase/` has not been resolved yet, run the Initialization Flow first.
 2. Create `knowledgebase/<name>/` inside the resolved knowledgebase folder
 3. Create `knowledgebase/<name>/_source/`
-4. Create `knowledgebase/<name>/INDEX.md` with the standard template (see `references/kb-structure.md`)
+4. Create `knowledgebase/<name>/INDEX.md` with the standard template (see `references/kb-structure.md`), including the `**Covers:**` routing line directly under the title. At creation the sub-KB is empty, so seed `Covers:` from the `<name>` and the user's stated intent; it is refined as documents are added.
 5. Add an entry to `knowledgebase/BATCH_STATUS.md` noting the new sub-KB was initialized
 
 ---
@@ -392,6 +448,7 @@ Re-run the Initialization Flow to set or change the **parent directory** that co
 - If a config already exists, show the current parent directory and ask whether to keep it or change it.
 - If the user changes the parent directory: apply the same absolute-path validation as the Initialization Flow (reject relative paths, re-prompt until an absolute path is given). Validate the directory exists; offer to create it if not. Then update `~/.claude/skills/kb/config.json`.
 - Does **not** move or delete any existing knowledgebase content — only updates the stored pointer.
+- **Install the proactive-consult hook** — offer to register the `UserPromptSubmit` hook (see "Proactive-Consult Hook" above), confirmation-gated and idempotent. This is the primary way an installer turns on proactive KB consultation, so offer it here even when the config is unchanged.
 
 ---
 
@@ -421,3 +478,5 @@ Domain-specific scripts (e.g., parsers for a fixed spreadsheet schema or diagram
 - BATCH_STATUS.md at `knowledgebase/` root tracks all sub-KBs in one place
 - When adding documents, always read the source INDEX.md before updating it to avoid duplicating sections
 - Config file: `~/.claude/skills/kb/config.json` — stores the absolute path to the `knowledgebase/` folder; local discovery (CWD / parent) always takes priority over this file
+- Proactive consultation is delivered by the `UserPromptSubmit` hook (`hooks/kb-consult-hook.py`), installed via `/kb init` — **not** by the skill `description` or by `CLAUDE.md`. A description surfaces availability; only per-turn context injection reliably triggers unprompted lookups. See "Proactive-Consult Hook"
+- Every sub-KB INDEX.md carries a `**Covers:**` routing line under its title (topics the sub-KB answers). It is how the model picks the right sub-KB once consultation is triggered; `/kb add` keeps it current, `/kb validate` warns if missing

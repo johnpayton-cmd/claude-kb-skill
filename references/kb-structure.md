@@ -87,15 +87,22 @@ How this document applies to the work done in this specific workspace
 
 Each sub-KB's INDEX.md should contain:
 
-1. **Quick use-case lookup table** — maps job/question to specific KB file(s)
-2. **Document sections** — grouped by topic/domain, one entry per summary
-3. **Cross-references** — pointers to related docs in other sub-KBs
-4. **Naming table** (if applicable) — e.g., control family → procedure file mapping
+1. **`Covers:` routing line** — a single line directly under the title listing the topics this
+   sub-KB covers. It is the machine-readable routing hint: when consultation is triggered, the
+   model scans each sub-KB's `Covers:` line to decide which sub-KB to open, without reading the
+   whole INDEX. Keep it concise and current (`/kb add` refreshes it). Legacy INDEXes without it
+   still work; `/kb validate` warns and `/kb review` can backfill it.
+2. **Quick use-case lookup table** — maps job/question to specific KB file(s)
+3. **Document sections** — grouped by topic/domain, one entry per summary
+4. **Cross-references** — pointers to related docs in other sub-KBs
+5. **Naming table** (if applicable) — e.g., control family → procedure file mapping
 
 ### INDEX.md Template
 
 ```markdown
 # [Sub-KB Name] Knowledge Base Index
+
+**Covers:** [comma-separated list of the topics/domains this sub-KB answers questions about]
 
 ## Quick Use-Case Lookup
 
