@@ -52,6 +52,9 @@ delivered by a `UserPromptSubmit` hook (`hooks/kb-consult-hook.py`) whose output
 context each turn — the same mechanism as a standing `CLAUDE.md` instruction, which is what makes
 it reliable.
 
+Already have an install from before the hook existed? See [UPGRADING.md](UPGRADING.md) for the
+update + hook-install steps.
+
 `/kb init` offers to install the hook for you (and any `/kb` command will offer it if it sees a
 knowledgebase but no hook). The hook is **conditional**: it emits the "consult the KB first"
 mandate only when a knowledgebase is resolvable, and stays silent otherwise, so it adds nothing
