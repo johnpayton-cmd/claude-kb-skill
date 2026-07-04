@@ -4,7 +4,7 @@
 # (.github/dependabot.yml) has a manifest to bump. CSV extraction uses the
 # standard library only and needs nothing here.
 pymupdf==1.24.10          # extract_pdf.py
-python-docx==1.1.2        # extract_docx.py
+python-docx==1.2.0        # extract_docx.py
 openpyxl==3.1.5           # extract_xlsx.py
 requests==2.32.3          # extract_html.py
 beautifulsoup4==4.15.0    # extract_html.py
