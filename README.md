@@ -38,8 +38,8 @@ A [Claude Code](https://claude.ai/code) skill for building and maintaining a loc
 
 > **Note on HTML export:** `/kb export --format html` produces a deliberately minimal,
 > self-contained HTML file. A richer, branded multi-page HTML "hub" generator
-> (`private/generate_kb_site.py`) is intentionally kept private (an Invictrix-specific
-> feature) and is **not** part of this repository. The public skill is complete without it.
+> is intentionally kept private (an Invictrix-specific feature) and is **not** part of
+> this repository. The public skill is complete without it.
 >
 > `/kb export all` skips any sub-KB listed in the `export_exclude` array of `config.json`,
 > so internal sub-KBs stay out of bulk exports (they remain exportable when named explicitly).
