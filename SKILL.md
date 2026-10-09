@@ -13,7 +13,7 @@ description: >
   description — it is delivered by the UserPromptSubmit hook that /kb init installs
   (see "Proactive-Consult Hook" below). A skill description surfaces availability and
   routes explicit calls; it does not reliably trigger unprompted lookups.
-argument-hint: [list|search|add|update|review|status|new] [sub-kb] [args...]
+argument-hint: "[list|search|add|update|review|status|new] [sub-kb] [args...]"
 ---
 
 # KB Skill — Knowledgebase Navigation and Maintenance
@@ -50,7 +50,7 @@ injected into per-turn context. So the "consult the KB before answering from tra
 behavior lives in a hook, not in the frontmatter.
 
 **The hook script:** `hooks/kb-consult-hook.py` (in this skill's folder). It resolves the KB
-(CWD → parent → `~/.claude/skills/kb/config.json`) and, if one exists, prints a domain-agnostic
+(CWD → parent → `.kb-config.json` in CWD → `~/.claude/skills/kb/config.json`) and, if one exists, prints a domain-agnostic
 proactive-consult mandate; if no KB is in scope it prints nothing (zero noise in non-KB sessions).
 It is mandate-only — which sub-KB to use is decided by reading each sub-KB's INDEX `Covers:` line
 once consultation is triggered.
@@ -92,7 +92,7 @@ and no prior hook picks up proactive consultation.
 
 ## Initialization Flow
 
-Triggered automatically when no `knowledgebase/` folder is found via Discovery steps 1–3. Also triggered by `/kb init`.
+Triggered automatically when no `knowledgebase/` folder is found via Discovery steps 1–4. Also triggered by `/kb init`.
 
 The user chooses the **parent directory**. The skill always creates a folder named exactly `knowledgebase/` inside it — the name is not configurable.
 
@@ -196,12 +196,13 @@ list from it. If INDEX.md doesn't exist, list `summary_*.md` files directly.
 
 ---
 
-### `/kb search <topic>`
+### `/kb search <topic> [--tag <tag>]`
 
 1. Read `knowledgebase/BATCH_STATUS.md` (if it exists) for context on what's in the KB
 2. Read the INDEX.md for every sub-KB
-3. Surface the most relevant documents for the topic with their file paths
-4. If the user then needs the content, read the specific summary file
+3. If `--tag` is given, read the front-matter of each candidate `summary_*.md` and keep only those whose `tags` list contains the tag (summaries without front-matter are skipped with a warning)
+4. Surface the most relevant documents for the topic with their file paths
+5. If the user then needs the content, read the specific summary file
 
 ---
 
@@ -224,28 +225,39 @@ Full pipeline for adding a new source document to a sub-KB. Steps:
    - Excel/XLSX → use `extract_xlsx.py` (in this skill's `scripts/` folder) to extract data
    - HTML file or HTML URL → use `extract_html.py` (in this skill's `scripts/` folder) to extract text
    - CSV → use `extract_csv.py` (in this skill's `scripts/` folder) to extract data
-4. **Extract text** — for PDFs, extract in sections (respect the 80,000 char limit in extract_pdf.py). Read the TOC page(s) first to identify structure, then extract relevant sections. For DOCX, run with `--headings-only` first to map structure, then run without flags for full content.
-5. **Draft summary** — follow the standard summary format (see `references/kb-structure.md`). Every newly added summary must include the full YAML front-matter block (the pipeline below computes the checksum in step 8):
-   - YAML front-matter block (required for new docs): `source_file`, `version`, `date_added`, `last_updated`, `tags`, `checksum_sha256`
+4. **Extract text in full, to a file.** Read the structure first (PDF TOC pages, DOCX `--headings-only`, XLSX/CSV `--headers-only`). Then extract the whole source into a temp file outside the KB, so the summary can be checked against it in step 6:
+   - PDF: extract in passes of up to 80,000 chars; when a pass ends early, continue from the page its truncation marker names. Append every pass to the same file.
+   - DOCX: run without flags (all rows, unclipped cells by default).
+   - XLSX/CSV: run with `--max-rows 0 --max-cell 0`. Large workbooks may be too big to read in one go; read them in sections from the file, but the file itself must be complete.
+   - HTML: raise `--max-chars` until the coverage line says FULL.
+
+   Every extractor ends with a `[COVERAGE: ...]` line. **Record it.** If it says PARTIAL, either extract the rest or state in the summary exactly what was not read. Never describe a partial read as full content.
+5. **Draft summary** — follow the standard summary format (see `references/kb-structure.md`). Every newly added summary must include the full YAML front-matter block (the pipeline below computes the checksum in step 9):
+   - YAML front-matter block (required for new docs): `source_file`, `version`, `date_added`, `last_updated`, `tags`, `checksum_sha256`, plus `coverage` (the extractor's COVERAGE line, or "full" for Markdown/text read directly)
    - Title + one-line hook
    - Purpose, Scope, Key Sections, Critical Controls/Requirements
    - Workspace Relevance
    - File should be named `summary_<name>.md` in kebab-case (version suffix only to disambiguate editions)
-6. **Place the summary** in `knowledgebase/<sub-kb>/summary_<name>.md`
-7. **Copy or confirm** the source file is in `knowledgebase/<sub-kb>/_source/` (URL sources are already there from step 2)
-8. **Compute and record checksum** — compute the SHA-256 of the source file and write it into the summary's `checksum_sha256` front-matter field. Use: `python -c "import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" <source-path>`
-9. **Update INDEX.md** — add an entry for the new document in the correct section, add cross-references if relevant, update the quick-lookup table if applicable, and refresh the `**Covers:**` routing line so it still reflects the sub-KB's topic span after this addition
-10. **Update BATCH_STATUS.md** — add a new completed batch entry with today's date and the summary filename
+
+   **Source fidelity rules.** Every control ID, number, threshold, table row, and named category in the summary must come from the extract, not from general knowledge of the framework. Quote conditional wording as the source states it ("whichever is greater", "consult the PMO"); do not harden or soften it. Compute any count (controls per baseline, rows per table) from the extract itself, for example by counting distinct IDs, and never read it off a row total, because header rows inflate row totals. Material from a second source must name that source inline.
+6. **Verify against the extract.** Run `verify_summary.py <summary> <extract-file> [<second-source-extract> ...]`. It lists every control ID and multi-digit number in the summary that does not appear in the extract. For each hit, fix the summary, or confirm the token is legitimate (a computed count, a Word auto-generated heading number, a date from a cited second source) and re-run with `--ignore <token>`. Do not place the summary until the check exits 0. The check cannot catch reworded conditions or invented categories, so re-read the Critical Controls / Requirements section against the extract before placing it.
+7. **Place the summary** in `knowledgebase/<sub-kb>/summary_<name>.md`
+8. **Copy or confirm** the source file is in `knowledgebase/<sub-kb>/_source/` (URL sources are already there from step 2)
+9. **Compute and record checksum** — compute the SHA-256 of the source file and write it into the summary's `checksum_sha256` front-matter field. Use: `python -c "import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" <source-path>`
+10. **Update INDEX.md** — add an entry for the new document in the correct section, add cross-references if relevant, update the quick-lookup table if applicable, and refresh the `**Covers:**` routing line so it still reflects the sub-KB's topic span after this addition
+11. **Update BATCH_STATUS.md** — add a new completed batch entry with today's date and the summary filename
 
 Run `extract_pdf.py` as: `uv run --python 3.12 --with pymupdf <path-to-script> <pdf-path> [start_page] [end_page]`
 
-Run `extract_docx.py` as: `uv run --python 3.12 --with python-docx <path-to-script> <docx-path> [--headings-only] [--tables-only] [--max-rows N]`
+Run `extract_docx.py` as: `uv run --python 3.12 --with python-docx <path-to-script> <docx-path> [--headings-only] [--tables-only] [--max-rows N] [--max-cell N]`
+
+Run `verify_summary.py` as: `python <path-to-script> <summary.md> <extract.txt> [more extracts] [--ignore TOKEN ...]` (stdlib only)
 
 ---
 
 ### `/kb update <sub-kb> [document]`
 
-**With document name:** Re-read the source file, then regenerate the summary for that document. Follow the same summary format. Overwrite the existing `summary_*.md` file. Update the "last updated" note in BATCH_STATUS.md.
+**With document name:** Regenerate the summary using `/kb add` steps 3–6 and 9: full extract to a file, draft under the source fidelity rules, `verify_summary.py` until it exits 0, then recompute `checksum_sha256` from the current source file. In the front-matter, set `last_updated` to today, refresh `coverage`, and update `version` if the source edition changed; keep `date_added`. Overwrite the existing `summary_*.md` file. Update the "last updated" note in BATCH_STATUS.md.
 
 **Without document:** Read INDEX.md and BATCH_STATUS.md, then list all summaries and ask which one to refresh.
 
@@ -459,10 +471,13 @@ Scripts live in this skill's `scripts/` subdirectory:
 | Script | Purpose | Usage |
 |---|---|---|
 | `extract_pdf.py` | Extract text from a PDF by page range | `python extract_pdf.py <path> [start] [end]` |
-| `extract_docx.py` | Extract text and tables from a DOCX file | `python extract_docx.py <path> [--headings-only] [--tables-only] [--max-rows N]` |
-| `extract_xlsx.py` | Extract data from any XLSX spreadsheet | `python extract_xlsx.py <path> [--sheet Name] [--headers-only] [--max-rows N]` |
+| `extract_docx.py` | Extract text and tables from a DOCX file (all rows, unclipped by default) | `python extract_docx.py <path> [--headings-only] [--tables-only] [--max-rows N] [--max-cell N]` |
+| `extract_xlsx.py` | Extract data from any XLSX spreadsheet (50-row preview by default; `--max-rows 0 --max-cell 0` for all) | `python extract_xlsx.py <path> [--sheet Name] [--headers-only] [--max-rows N] [--max-cell N]` |
 | `extract_html.py` | Extract readable text from a URL or local HTML file | `python extract_html.py <url-or-path> [--selector CSS] [--headings-only] [--max-chars N]` |
-| `extract_csv.py` | Extract data from a CSV file (stdlib only) | `python extract_csv.py <path> [--columns A,B] [--headers-only] [--max-rows N] [--delimiter C]` |
+| `extract_csv.py` | Extract data from a CSV file (stdlib only; 50-row preview by default; `--max-rows 0 --max-cell 0` for all) | `python extract_csv.py <path> [--columns A,B] [--headers-only] [--max-rows N] [--max-cell N] [--delimiter C]` |
+| `verify_summary.py` | List control IDs and numbers in a summary that are absent from its source extract (stdlib only) | `python verify_summary.py <summary.md> <extract.txt> [more] [--ignore TOKEN ...]` |
+
+Every extractor ends its output with a `[COVERAGE: ... FULL|PARTIAL]` line stating what was read.
 
 To run scripts, use `uv run --python 3.12 --with <dep> <script> <args>` or `python <script> <args>` if dependencies are already installed. Key dependencies: `pymupdf` (fitz) for PDF extraction, `python-docx` for DOCX, `openpyxl` for Excel, `requests beautifulsoup4` for HTML. CSV uses stdlib only.
 

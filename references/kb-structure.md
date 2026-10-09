@@ -46,8 +46,11 @@ date_added: YYYY-MM-DD
 last_updated: YYYY-MM-DD           # same as date_added on first add
 tags: [tag1, tag2, tag3]           # lowercase, hyphenated; see tag guidance below
 checksum_sha256: <64-char hex>     # SHA-256 of the source file at add-time
+coverage: "<COVERAGE line>"        # optional; what the extractor read, e.g. "rows 189/189, FULL"
 ---
 ```
+
+`coverage` is optional so that older summaries stay valid, but `/kb add` and `/kb update` always write it.
 
 **Tag guidance:** Use concise, reusable labels. Examples: `nist`, `fedramp`, `owasp`, `cloud`, `zero-trust`, `ai-security`, `incident-response`, `controls`, `federal`, `access-control`. Tags drive `/kb search --tag` filtering and `/kb export --tag` scoping.
 

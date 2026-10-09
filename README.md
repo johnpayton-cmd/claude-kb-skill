@@ -103,10 +103,13 @@ The skill finds your knowledgebase in this order:
 | Script | Purpose | Usage |
 |---|---|---|
 | `extract_pdf.py` | Extract text from a PDF by page range | `uv run --python 3.12 --with pymupdf extract_pdf.py <path> [start] [end]` |
-| `extract_docx.py` | Extract text and tables from a DOCX file | `uv run --python 3.12 --with python-docx extract_docx.py <path> [--headings-only] [--max-rows N]` |
-| `extract_xlsx.py` | Extract data from any XLSX spreadsheet | `uv run --python 3.12 --with openpyxl extract_xlsx.py <path> [--sheet Name] [--headers-only] [--max-rows N]` |
+| `extract_docx.py` | Extract text and tables from a DOCX file (all rows, unclipped by default) | `uv run --python 3.12 --with python-docx extract_docx.py <path> [--headings-only] [--tables-only] [--max-rows N] [--max-cell N]` |
+| `extract_xlsx.py` | Extract data from any XLSX spreadsheet (`--max-rows 0 --max-cell 0` for all) | `uv run --python 3.12 --with openpyxl extract_xlsx.py <path> [--sheet Name] [--headers-only] [--max-rows N] [--max-cell N]` |
 | `extract_html.py` | Extract readable text from a URL or local HTML file | `uv run --python 3.12 --with requests --with beautifulsoup4 extract_html.py <url-or-path> [--selector CSS] [--headings-only] [--max-chars N]` |
-| `extract_csv.py` | Extract data from a CSV file (no extra deps) | `python extract_csv.py <path> [--columns A,B] [--headers-only] [--max-rows N] [--delimiter C]` |
+| `extract_csv.py` | Extract data from a CSV file (no extra deps; `--max-rows 0 --max-cell 0` for all) | `python extract_csv.py <path> [--columns A,B] [--headers-only] [--max-rows N] [--max-cell N] [--delimiter C]` |
+| `verify_summary.py` | List control IDs and numbers in a summary that are absent from its source extract (no extra deps) | `python verify_summary.py <summary.md> <extract.txt> [more] [--ignore TOKEN ...]` |
+
+Every extractor ends with a `[COVERAGE: ... FULL|PARTIAL]` line, so a partial read is always visible.
 
 > **Note:** `/kb add <url>` and `extract_html.py` fetch the URL you provide. Fetching is
 > limited to `http`/`https` and blocks loopback/link-local/metadata hosts, but it is not a

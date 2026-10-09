@@ -8,7 +8,7 @@ hook, whose stdout is injected into per-turn context, does (measured ~10/10). So
 consult the KB before answering from training data" behavior lives here, not in the frontmatter.
 
 Behavior: emit the mandate ONLY when a local knowledgebase is resolvable (CWD -> parent ->
-~/.claude/skills/kb/config.json). Silent otherwise, so it adds zero noise/cost in sessions with
+.kb-config.json in CWD -> ~/.claude/skills/kb/config.json). Silent otherwise, so it adds zero noise/cost in sessions with
 no KB. Mandate-only: which sub-KB to use is decided by the kb skill reading each sub-KB's INDEX
 (and its `Covers:` line) once consultation is triggered.
 
@@ -26,14 +26,16 @@ def resolve_kb():
         p = os.path.join(base, "knowledgebase")
         if os.path.isdir(p):
             return p
-    cfg = os.path.expanduser(os.path.join("~", ".claude", "skills", "kb", "config.json"))
-    try:
-        with open(cfg, encoding="utf-8") as f:
-            p = json.load(f).get("knowledgebase_path")
-        if p and os.path.isdir(p):
-            return p
-    except Exception:
-        pass
+    workspace_cfg = os.path.join(cwd, ".kb-config.json")
+    global_cfg = os.path.expanduser(os.path.join("~", ".claude", "skills", "kb", "config.json"))
+    for cfg in (workspace_cfg, global_cfg):
+        try:
+            with open(cfg, encoding="utf-8") as f:
+                p = json.load(f).get("knowledgebase_path")
+            if p and os.path.isdir(p):
+                return p
+        except Exception:
+            pass
     return None
 
 

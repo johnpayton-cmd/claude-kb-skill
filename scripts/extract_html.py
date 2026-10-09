@@ -83,7 +83,7 @@ def extract_html(source, selector=None, headings_only=False, max_chars=80000):
     # Narrow scope if selector given
     root = soup.select_one(selector) if selector else soup.body or soup
     if selector and root is None:
-        print(f"Selector '{selector}' matched nothing — falling back to full body.", file=sys.stderr)
+        print(f"Selector '{selector}' matched nothing. Falling back to full body.", file=sys.stderr)
         root = soup.body or soup
 
     if headings_only:
@@ -96,6 +96,7 @@ def extract_html(source, selector=None, headings_only=False, max_chars=80000):
     # Full text extraction: walk block elements, emit line-separated text
     chunks = []
     chars = 0
+    truncated = False
     for el in root.find_all(["p", "li", "h1", "h2", "h3", "h4", "h5", "h6",
                               "td", "th", "pre", "blockquote", "dt", "dd"]):
         text = el.get_text(separator=" ", strip=True)
@@ -103,13 +104,16 @@ def extract_html(source, selector=None, headings_only=False, max_chars=80000):
             continue
         line = f"{text}\n"
         if chars + len(line) > max_chars:
-            chunks.append(f"\n[Truncated at {chars} chars — use --max-chars to extend]\n")
+            chunks.append(f"\n[Truncated at {chars} chars. Use --max-chars to extend]\n")
+            truncated = True
             break
         chunks.append(line)
         chars += len(line)
 
     print("".join(chunks))
-    print(f"\n[{chars} chars extracted]")
+    scope = f", selector {selector!r}" if selector else ""
+    print(f"\n[COVERAGE: {chars} chars{scope}"
+          f"{', TRUNCATED by char limit, PARTIAL' if truncated else ', FULL'}]")
 
 
 if __name__ == "__main__":

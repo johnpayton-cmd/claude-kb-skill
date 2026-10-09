@@ -35,16 +35,24 @@ def extract(path, start=0, end=None, max_chars=80000):
     end = min(end, total)
     chunks = []
     chars = 0
+    last_read = start  # 1-based number of the last page fully read
     for i in range(start, end):
         text = doc[i].get_text()
         if chars + len(text) > max_chars:
-            chunks.append(f"\n[Truncated at page {i+1} of {total} — {chars} chars extracted]\n")
+            chunks.append(f"\n[Truncated before page {i+1}: {chars} chars extracted. "
+                          f"Continue with start_page {i+1}]\n")
             break
         chunks.append(f"\n--- Page {i+1} ---\n{text}")
         chars += len(text)
+        last_read = i + 1
     doc.close()
-    print(f"[PDF: {path}  |  Pages {start+1}–{end} of {total}  |  {chars} chars]\n")
+    read = f"{start+1}-{last_read}" if last_read > start else "none"
+    print(f"[PDF: {path}  |  Pages {read} of {total}  |  {chars} chars]\n")
     print("".join(chunks))
+    partial = last_read < end or start > 0 or end < total
+    note = ", TRUNCATED by char limit" if last_read < end else ""
+    print(f"\n[COVERAGE: pages {read} of {total} read{note}, "
+          f"{'PARTIAL' if partial else 'FULL'}]")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
