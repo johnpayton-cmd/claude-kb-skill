@@ -1,7 +1,7 @@
 """Check that every identifier and number in a KB summary appears in its source extract.
 
 Usage:
-  python verify_summary.py <summary.md> <extract.txt> [<extract2.txt> ...] [--ignore TOKEN ...]
+  python verify_summary.py <summary.md> <extract.txt> [<extract2.txt> ...] [--ignore TOKEN [TOKEN ...]]
 
 What it checks:
   - Control-style identifiers such as AC-11, AC-11(1), SC-7(4), NTC-0013. Zero padding

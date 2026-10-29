@@ -107,7 +107,7 @@ The skill finds your knowledgebase in this order:
 | `extract_xlsx.py` | Extract data from any XLSX spreadsheet (`--max-rows 0 --max-cell 0` for all) | `uv run --python 3.12 --with openpyxl extract_xlsx.py <path> [--sheet Name] [--headers-only] [--max-rows N] [--max-cell N]` |
 | `extract_html.py` | Extract readable text from a URL or local HTML file | `uv run --python 3.12 --with requests --with beautifulsoup4 extract_html.py <url-or-path> [--selector CSS] [--headings-only] [--max-chars N]` |
 | `extract_csv.py` | Extract data from a CSV file (no extra deps; `--max-rows 0 --max-cell 0` for all) | `python extract_csv.py <path> [--columns A,B] [--headers-only] [--max-rows N] [--max-cell N] [--delimiter C]` |
-| `verify_summary.py` | List control IDs and numbers in a summary that are absent from its source extract (no extra deps) | `python verify_summary.py <summary.md> <extract.txt> [more] [--ignore TOKEN ...]` |
+| `verify_summary.py` | List control IDs and numbers in a summary that are absent from its source extract (no extra deps) | `python verify_summary.py <summary.md> <extract.txt> [more] [--ignore TOKEN [TOKEN ...]]` |
 
 Every extractor ends with a `[COVERAGE: ... FULL|PARTIAL]` line, so a partial read is always visible.
 
