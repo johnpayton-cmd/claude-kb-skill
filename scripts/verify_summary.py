@@ -98,7 +98,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("summary")
     parser.add_argument("extracts", nargs="+")
-    parser.add_argument("--ignore", nargs="*", default=[],
+    parser.add_argument("--ignore", action="extend", nargs="+", default=[],
                         help="Tokens confirmed as supported (e.g. derived counts)")
     args = parser.parse_args()
 
